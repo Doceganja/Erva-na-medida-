@@ -1,0 +1,7 @@
+{
+  "name": "Erva na Medida",
+  "description": "Calculadora inteligente de dosagem canábica e bem-estar com IA.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
