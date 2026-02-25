@@ -166,7 +166,7 @@ function HomeView() {
   }, []);
 
   useEffect(() => {
-    if (logs.length > 0 && recipes.length > 0 && !suggestion && !loadingSuggestion) {
+    if (recipes.length > 0 && !suggestion && !loadingSuggestion) {
       generateSuggestion();
     }
   }, [logs, recipes]);
@@ -186,13 +186,15 @@ function HomeView() {
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Você é o assistente "Dose na Medida". 
+        Contexto: ${context}
         Com base no histórico do usuário e nas receitas disponíveis, sugira UMA receita ideal para ele agora.
         Explique brevemente por que essa receita combina com as strains ou métodos que ele costuma usar.
         Seja motivador e use emojis. Retorne apenas o texto da sugestão em formato Markdown curto.`,
       });
       setSuggestion(response.text || null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao gerar sugestão:", err);
+      setSuggestion(`Erro ao gerar sugestão: ${err.message || err}`);
     } finally {
       setLoadingSuggestion(false);
     }
@@ -559,13 +561,11 @@ function AIView() {
         Você conhece todas as receitas do app e pode sugerir uma delas se fizer sentido.
         Analise se o consumo atual parece seguro com base no histórico.
         Seja conciso, profissional e use emojis.`,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
       });
       setMessages(prev => [...prev, { role: 'ai', text: response.text || "Desculpe, tive um problema ao processar." }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: "Erro ao conectar com a IA." }]);
+    } catch (err: any) {
+      console.error("Gemini API Error:", err);
+      setMessages(prev => [...prev, { role: 'ai', text: `Erro ao conectar com a IA: ${err.message || err}` }]);
     } finally {
       setLoading(false);
     }

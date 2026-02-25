@@ -1,8 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
 export const getGeminiModel = () => {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
   return ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: "Hello",
@@ -10,6 +9,7 @@ export const getGeminiModel = () => {
 };
 
 export const generateDoseAdvice = async (profile: any, query: string) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `Você é o assistente "Dose na Medida" do app Erva na Medida. 
