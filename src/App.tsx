@@ -518,9 +518,11 @@ function AIView() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
+  const [recipes, setRecipes] = useState<any[]>([]);
 
   useEffect(() => {
     fetch('/api/logs').then(res => res.json()).then(setLogs);
+    fetch('/api/recipes').then(res => res.json()).then(setRecipes);
   }, []);
 
   const handleSend = async () => {
@@ -538,13 +540,14 @@ function AIView() {
         ? recentLogs.reduce((acc, l) => acc + l.effect_rating, 0) / recentLogs.length 
         : 5;
       const totalThcToday = logs
-        .filter(l => new Date(l.timestamp).toDateString() === new Date().toDateString())
-        .reduce((acc, l) => acc + (l.amount * (l.thc / 100) * 1000), 0);
+        .filter(l => l.timestamp && new Date(l.timestamp).toDateString() === new Date().toDateString())
+        .reduce((acc, l) => acc + (Number(l.amount || 0) * (Number(l.thc || 0) / 100) * 1000), 0);
 
       const context = `
         Histórico recente: ${JSON.stringify(recentLogs.map(l => ({ strain: l.strain_name, dose: l.amount, rating: l.effect_rating })))}
         Consumo de THC hoje: ${totalThcToday.toFixed(1)}mg
         Avaliação média recente: ${avgRating.toFixed(1)}/10
+        Receitas disponíveis no app: ${recipes.map(r => r.name).join(', ')}
       `;
 
       const response = await ai.models.generateContent({
@@ -553,8 +556,12 @@ function AIView() {
         Contexto do usuário: ${context}
         O usuário pergunta: ${userMsg}
         Forneça orientações personalizadas sobre dosagem, tolerância e redução de danos. 
+        Você conhece todas as receitas do app e pode sugerir uma delas se fizer sentido.
         Analise se o consumo atual parece seguro com base no histórico.
         Seja conciso, profissional e use emojis.`,
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
       });
       setMessages(prev => [...prev, { role: 'ai', text: response.text || "Desculpe, tive um problema ao processar." }]);
     } catch (err) {
@@ -757,34 +764,75 @@ function RecipesView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-6">
         {filteredRecipes.map(r => (
-          <div 
+          <motion.div 
+            layout
             key={r.id} 
             onClick={() => setSelectedRecipe(r)}
-            className="bg-white rounded-3xl border border-stone-100 shadow-sm overflow-hidden active:scale-[0.98] transition-transform"
+            className="bg-white rounded-[2rem] border border-stone-100 shadow-sm overflow-hidden active:scale-[0.98] transition-all hover:shadow-md cursor-pointer group"
           >
-            {r.image_url && (
-              <img src={r.image_url} className="w-full h-32 object-cover" referrerPolicy="no-referrer" />
-            )}
-            <div className="p-5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h5 className="font-display font-bold text-stone-900">{r.name}</h5>
-                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Por: {r.author || 'Anônimo'}</p>
+            <div className="relative h-48 overflow-hidden">
+              {r.image_url ? (
+                <img 
+                  src={r.image_url} 
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                  referrerPolicy="no-referrer" 
+                />
+              ) : (
+                <div className="w-full h-full bg-stone-100 flex items-center justify-center">
+                  <Utensils className="w-12 h-12 text-stone-200" />
                 </div>
-                <div className="bg-brand-50 px-2 py-1 rounded-lg">
-                  <span className="text-xs font-bold text-brand-600">{r.thc_per_serving?.toFixed(1)}mg THC</span>
+              )}
+              <div className="absolute top-4 left-4 flex gap-2">
+                <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm">
+                  <span className="text-[10px] font-black text-brand-600 uppercase tracking-tighter">
+                    {r.thc_per_serving?.toFixed(1)}mg THC
+                  </span>
+                </div>
+                {r.servings && (
+                  <div className="bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full">
+                    <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
+                      {r.servings} Porções
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+              <div className="absolute bottom-4 left-5">
+                <p className="text-[10px] text-white/80 font-bold uppercase tracking-widest mb-1">Por: {r.author || 'Anônimo'}</p>
+                <h5 className="text-xl font-display font-bold text-white leading-tight">{r.name}</h5>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-stone-500 leading-relaxed line-clamp-3 mb-4">
+                {r.description}
+              </p>
+              <div className="flex items-center justify-between pt-4 border-t border-stone-50">
+                <div className="flex gap-2">
+                  {(r.ingredients || []).slice(0, 2).map((ing: any, idx: number) => (
+                    <span key={idx} className="text-[10px] bg-stone-50 text-stone-400 px-2 py-1 rounded-md border border-stone-100">
+                      {ing.name}
+                    </span>
+                  ))}
+                  {(r.ingredients || []).length > 2 && (
+                    <span className="text-[10px] text-stone-300 py-1">
+                      +{(r.ingredients || []).length - 2} mais
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 text-brand-600 font-bold text-xs">
+                  Ver Receita <Plus className="w-3 h-3" />
                 </div>
               </div>
-              <p className="text-xs text-stone-500 mt-2 line-clamp-2">{r.description}</p>
             </div>
-          </div>
+          </motion.div>
         ))}
         {filteredRecipes.length === 0 && (
-          <div className="text-center py-12">
-            <Utensils className="w-12 h-12 text-stone-200 mx-auto mb-3" />
-            <p className="text-stone-400 text-sm">Nenhuma receita encontrada.</p>
+          <div className="text-center py-16 bg-white rounded-[2rem] border border-dashed border-stone-200">
+            <Utensils className="w-16 h-16 text-stone-100 mx-auto mb-4" />
+            <h5 className="font-display font-bold text-stone-400">Nenhuma receita encontrada</h5>
+            <p className="text-stone-300 text-xs mt-1">Tente ajustar seus filtros de busca.</p>
           </div>
         )}
       </div>
@@ -806,48 +854,119 @@ function RecipesView() {
       )}
 
       {selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end justify-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-end justify-center">
           <motion.div 
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto"
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="bg-white w-full max-w-md rounded-t-[2.5rem] overflow-hidden max-h-[92vh] flex flex-col"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-display font-bold">{selectedRecipe.name}</h3>
-              <button onClick={() => setSelectedRecipe(null)} className="text-stone-400"><Plus className="w-6 h-6 rotate-45" /></button>
+            {/* Modal Header with Image */}
+            <div className="relative h-64 shrink-0">
+              {selectedRecipe.image_url ? (
+                <img 
+                  src={selectedRecipe.image_url} 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer" 
+                />
+              ) : (
+                <div className="w-full h-full bg-stone-100 flex items-center justify-center">
+                  <Utensils className="w-16 h-16 text-stone-200" />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <button 
+                onClick={() => setSelectedRecipe(null)} 
+                className="absolute top-6 right-6 w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white/40 transition-colors"
+              >
+                <Plus className="w-6 h-6 rotate-45" />
+              </button>
+              <div className="absolute bottom-6 left-8 right-8">
+                <p className="text-[10px] text-white/70 font-black uppercase tracking-[0.2em] mb-2">Receita por {selectedRecipe.author || 'Anônimo'}</p>
+                <h3 className="text-3xl font-display font-bold text-white leading-tight">{selectedRecipe.name}</h3>
+              </div>
             </div>
             
-            <div className="space-y-6">
-              <div className="flex gap-4">
-                <div className="bg-brand-50 p-3 rounded-2xl flex-1 text-center">
-                  <p className="text-[10px] font-bold text-brand-600 uppercase">THC / Porção</p>
-                  <p className="text-xl font-display font-bold text-brand-900">{selectedRecipe.thc_per_serving?.toFixed(1)}mg</p>
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-brand-50/50 p-4 rounded-3xl border border-brand-100/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-3 h-3 text-brand-600" />
+                    <p className="text-[10px] font-black text-brand-600 uppercase tracking-wider">Potência</p>
+                  </div>
+                  <p className="text-2xl font-display font-bold text-brand-900">{selectedRecipe.thc_per_serving?.toFixed(1)}<span className="text-sm ml-1">mg</span></p>
+                  <p className="text-[10px] text-brand-600/60 font-medium">THC por porção</p>
                 </div>
-                <div className="bg-stone-50 p-3 rounded-2xl flex-1 text-center">
-                  <p className="text-[10px] font-bold text-stone-400 uppercase">Porções</p>
-                  <p className="text-xl font-display font-bold text-stone-900">{selectedRecipe.servings}</p>
+                <div className="bg-stone-50 p-4 rounded-3xl border border-stone-100">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Utensils className="w-3 h-3 text-stone-400" />
+                    <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">Rendimento</p>
+                  </div>
+                  <p className="text-2xl font-display font-bold text-stone-900">{selectedRecipe.servings}</p>
+                  <p className="text-[10px] text-stone-400 font-medium">Porções totais</p>
                 </div>
               </div>
 
+              {/* Description */}
               <div>
-                <h4 className="font-bold text-stone-800 mb-2">Ingredientes</h4>
-                <ul className="space-y-1">
-                  {selectedRecipe.ingredients.map((ing: any, i: number) => (
-                    <li key={i} className="text-sm text-stone-600 flex justify-between">
-                      <span>{ing.name}</span>
-                      <span className="font-bold">{ing.amount} {ing.unit}</span>
-                    </li>
+                <p className="text-stone-600 leading-relaxed text-sm italic">
+                  "{selectedRecipe.description}"
+                </p>
+              </div>
+
+              {/* Ingredients */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 bg-brand-500 rounded-full" />
+                  <h4 className="font-display font-bold text-stone-900 uppercase tracking-widest text-xs">Ingredientes</h4>
+                </div>
+                <div className="bg-stone-50/50 rounded-3xl p-6 border border-stone-100/50">
+                  <ul className="space-y-3">
+                    {selectedRecipe.ingredients.map((ing: any, i: number) => (
+                      <li key={i} className="text-sm text-stone-700 flex justify-between items-center group">
+                        <span className="flex items-center gap-3">
+                          <div className="w-1.5 h-1.5 rounded-full bg-brand-200 group-hover:bg-brand-400 transition-colors" />
+                          {ing.name}
+                        </span>
+                        <span className="font-mono font-bold text-stone-400 bg-white px-2 py-1 rounded-lg border border-stone-100 text-[10px]">
+                          {ing.amount} {ing.unit}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 bg-brand-500 rounded-full" />
+                  <h4 className="font-display font-bold text-stone-900 uppercase tracking-widest text-xs">Modo de Preparo</h4>
+                </div>
+                <div className="relative pl-4 space-y-6">
+                  <div className="absolute left-0 top-2 bottom-2 w-px bg-stone-100" />
+                  {selectedRecipe.instructions.split('\n').filter((line: string) => line.trim()).map((step: string, i: number) => (
+                    <div key={i} className="relative">
+                      <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-white border-2 border-brand-500" />
+                      <p className="text-sm text-stone-600 leading-relaxed">
+                        {step.replace(/^\d+\.\s*/, '')}
+                      </p>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
 
-              <div>
-                <h4 className="font-bold text-stone-800 mb-2">Instruções</h4>
-                <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{selectedRecipe.instructions}</p>
-              </div>
-
-              <div className="pt-4 border-t border-stone-100">
-                <h4 className="font-bold text-stone-800 mb-4">Avaliações e Comentários</h4>
+              {/* Interactions */}
+              <div className="pt-8 border-t border-stone-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="font-display font-bold text-stone-900 uppercase tracking-widest text-xs">Comunidade</h4>
+                  <div className="flex items-center gap-1 text-brand-600">
+                    <Heart className="w-4 h-4 fill-current" />
+                    <span className="text-xs font-bold">Avaliações</span>
+                  </div>
+                </div>
                 <RecipeInteractions recipeId={selectedRecipe.id} />
               </div>
             </div>
@@ -1007,6 +1126,7 @@ function RecipeInteractions({ recipeId }: { recipeId: number }) {
   useEffect(() => { fetchInteractions(); }, [recipeId]);
 
   const handleSubmit = async () => {
+    if (!newComment.trim()) return;
     await fetch(`/api/recipes/${recipeId}/interact`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1017,47 +1137,69 @@ function RecipeInteractions({ recipeId }: { recipeId: number }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-stone-50 p-4 rounded-2xl space-y-3">
+    <div className="space-y-6">
+      <div className="bg-stone-50/50 p-6 rounded-[2rem] border border-stone-100/50 space-y-4">
         <div className="flex justify-between items-center">
-          <span className="text-xs font-bold text-stone-400 uppercase">Sua nota: {newRating}</span>
-          <input 
-            type="range" min="1" max="5" 
-            className="w-24 accent-brand-600"
-            value={newRating}
-            onChange={e => setNewRating(Number(e.target.value))}
-          />
+          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Sua Avaliação</span>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button 
+                key={star}
+                onClick={() => setNewRating(star)}
+                className="transition-transform active:scale-90"
+              >
+                <Heart 
+                  className={`w-5 h-5 ${star <= newRating ? 'text-red-500 fill-red-500' : 'text-stone-200'}`} 
+                />
+              </button>
+            ))}
+          </div>
         </div>
         <div className="relative">
           <input 
-            placeholder="Adicione um comentário..." 
-            className="w-full p-3 pr-12 rounded-xl bg-white border-stone-100 text-sm"
+            placeholder="O que achou desta receita?" 
+            className="w-full p-4 pr-14 rounded-2xl bg-white border border-stone-100 text-sm focus:ring-2 focus:ring-brand-500 transition-all"
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
           />
           <button 
             onClick={handleSubmit}
-            className="absolute right-2 top-2 w-8 h-8 bg-brand-600 text-white rounded-lg flex items-center justify-center"
+            disabled={!newComment.trim()}
+            className="absolute right-2 top-2 w-10 h-10 bg-brand-600 text-white rounded-xl flex items-center justify-center disabled:opacity-50 disabled:bg-stone-300 transition-all"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {interactions.map(inter => (
-          <div key={inter.id} className="bg-white p-3 rounded-xl border border-stone-100">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs font-bold text-stone-800">{inter.user_name}</span>
-              <div className="flex gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <Heart key={i} className={`w-3 h-3 ${i < inter.rating ? 'text-red-500 fill-red-500' : 'text-stone-200'}`} />
-                ))}
+      <div className="space-y-4">
+        {interactions.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-xs text-stone-300 italic">Seja o primeiro a comentar!</p>
+          </div>
+        ) : (
+          interactions.map(inter => (
+            <div key={inter.id} className="bg-white p-4 rounded-2xl border border-stone-50 shadow-sm flex gap-4">
+              <div className="w-10 h-10 rounded-full bg-stone-100 shrink-0 flex items-center justify-center text-stone-400 font-bold text-xs">
+                {inter.user_name?.[0] || 'U'}
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-stone-800">{inter.user_name}</span>
+                  <div className="flex gap-0.5">
+                    {[...Array(5)].map((_, i) => (
+                      <Heart key={i} className={`w-2.5 h-2.5 ${i < inter.rating ? 'text-red-500 fill-red-500' : 'text-stone-200'}`} />
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">{inter.comment}</p>
+                <p className="text-[8px] text-stone-300 mt-2 uppercase font-bold tracking-widest">
+                  {new Date(inter.created_at).toLocaleDateString('pt-BR')}
+                </p>
               </div>
             </div>
-            <p className="text-xs text-stone-600">{inter.comment}</p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
