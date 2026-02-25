@@ -223,13 +223,21 @@ async function startServer() {
   app.use(express.json());
   seedRecipes();
 
+  const safeParse = (str: any, fallback: any = []) => {
+    try {
+      return str ? JSON.parse(str) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  };
+
   // API Routes - Strains
   app.get("/api/strains", (req, res) => {
     const strains = db.prepare("SELECT * FROM strains").all();
     res.json(strains.map(s => ({
       ...s,
-      terpenes: JSON.parse(s.terpenes || "[]"),
-      effects: JSON.parse(s.effects || "[]")
+      terpenes: safeParse(s.terpenes),
+      effects: safeParse(s.effects)
     })));
   });
 
@@ -246,7 +254,7 @@ async function startServer() {
     const logs = db.prepare("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50").all();
     res.json(logs.map(l => ({
       ...l,
-      effects_felt: JSON.parse(l.effects_felt || "[]")
+      effects_felt: safeParse(l.effects_felt)
     })));
   });
 
@@ -263,7 +271,7 @@ async function startServer() {
     const recipes = db.prepare("SELECT * FROM recipes ORDER BY created_at DESC").all();
     res.json(recipes.map(r => ({
       ...r,
-      ingredients: JSON.parse(r.ingredients || "[]")
+      ingredients: safeParse(r.ingredients)
     })));
   });
 
@@ -274,7 +282,7 @@ async function startServer() {
     const interactions = db.prepare("SELECT * FROM recipe_interactions WHERE recipe_id = ?").all(req.params.id);
     res.json({ 
       ...recipe, 
-      ingredients: JSON.parse(recipe.ingredients || "[]"),
+      ingredients: safeParse(recipe.ingredients),
       interactions 
     });
   });
